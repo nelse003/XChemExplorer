@@ -793,23 +793,20 @@ class panddaRefine(object):
             os.system(cmd)
         elif os.path.isfile(os.path.join(self.ProjectPath,self.xtalID,'refine.split.ground-state.pdb')):
             Logfile.insert('found model of ground state: '+os.path.join(self.ProjectPath,self.xtalID,'refine.split.ground-state.pdb'))
-            if os.path.isfile(os.path.join(self.ProjectPath,self.xtalID,'cootOut','Refine_'+str(Serial),'refine.modified.pdb')):
-                Logfile.insert('found model of modified bound state')
-                os.chdir(os.path.join(self.ProjectPath,self.xtalID,'cootOut','Refine_'+str(Serial)))
-                ground_state=os.path.join(self.ProjectPath,self.xtalID,'refine.split.ground-state.pdb')
-                bound_state='refine.modified.pdb'
-                Logfile.insert('running giant.merge_conformations major=%s minor=%s' %(ground_state,bound_state))
+            os.chdir(os.path.join(self.ProjectPath,self.xtalID,'cootOut','Refine_'+str(Serial)))
+            ground_state=os.path.join(self.ProjectPath,self.xtalID,'refine.split.ground-state.pdb')
+            bound_state=os.path.join(self.ProjectPath,self.xtalID,'refine.split.bound-state.pdb')
+            Logfile.insert('running giant.merge_conformations major=%s minor=%s' %(ground_state,bound_state))
 
-                cmd = (
-                'export XChemExplorer_DIR="%s"\n' %os.getenv('XChemExplorer_DIR')+
-                'source %s\n' %os.path.join(os.getenv('XChemExplorer_DIR'),'setup-scripts','pandda.setup-sh\n') +
-                'giant.merge_conformations major=%s minor=%s reset_all_occupancies=False options.major_occupancy=1.0 options.minor_occupancy=1.0' %(ground_state,bound_state)
-                )
-                Logfile.insert(cmd+'\n')
-                os.system(cmd)
-            else:
-                Logfile.error('cannot find modified version of bound state in %s' %os.path.join(self.ProjectPath,self.xtalID,'cootOut','Refine_'+str(Serial)))
-                return None
+            cmd = (
+            #'export XChemExplorer_DIR="{}"\n'.format(os.getenv('XChemExplorer_DIR')) +
+            #'source {}\n'.format(os.path.join(os.getenv('XChemExplorer_DIR'),'setup-scripts','pandda.setup-sh')) +
+            #'mkdir {}\n'.format(os.path.join(self.ProjectPath,self.xtalID,'cootOut','Refine_'+str(Serial))) +
+            'cd {}\n'.format(os.path.join(self.ProjectPath,self.xtalID,'cootOut','Refine_'+str(Serial))) +
+            'giant.merge_conformations major={} minor={} reset_all_occupancies=False options.major_occupancy=1.0 options.minor_occupancy=1.0'.format(ground_state,bound_state)
+            )
+            Logfile.insert(cmd+'\n')
+            os.system(cmd)
         else:
             Logfile.error('cannot find model of ground state, aborting...')
             return None
@@ -831,10 +828,13 @@ class panddaRefine(object):
         # checking if multi-state-restraints.refmac.params file is present
         if os.path.isfile(os.path.join(self.ProjectPath,self.xtalID,'cootOut','Refine_'+str(Serial),'multi-state-restraints.refmac.params')):
             # add REFMAC keywords to multi-state-restraints.refmac.params
-            add_params = None
-            with open(os.path.join(self.ProjectPath, self.xtalID, 'extra.params'),'r') as extra_params:
-                add_params = extra_params.read()
-
+            add_params = []
+            ext_add_params = []
+            for line in open(os.path.join(self.ProjectPath, self.xtalID, 'extra.params'),'r'):
+                if line.startswith("exte"):
+                    ext_add_params.append(line)
+                else:
+                    add_params.append(line)
             exte_dist = []
             other_lines = []
             for line in open('multi-state-restraints.refmac.params','r'):
@@ -848,12 +848,19 @@ class panddaRefine(object):
                 for line in exte_dist:
                     refmacParams.write(line)
 
-                if add_params is not None:
-                    refmacParams.write(add_params)
+                if ext_add_params is not None:
+                    for line in ext_add_params:
+                        refmacParams.write(line)
 
                 for line in other_lines:
-                    refmacParams.write(line)
+                    if "occupancy refine" not in line:
+                        refmacParams.write(line)
 
+                if add_params is not None:
+                    for line in add_params:
+                        refmacParams.write(line)
+
+                refmacParams.write("occupancy refine"+'\n')
                 refmacParams.write(RefmacParams['BREF']+'\n')
                 refmacParams.write(RefmacParams['TLS']+'\n')
                 refmacParams.write(RefmacParams['TWIN']+'\n')
@@ -1019,7 +1026,7 @@ class panddaRefine(object):
 
         if external_software['qsub']:
             Logfile.insert('starting refinement on cluster')
-            os.system('qsub -P labxchem refmac.csh')
+            #os.system('qsub -P labxchem refmac.csh')
         elif external_software['qsub_remote'] != '':
             Logfile.insert('starting refinement on remote cluster')
             remote_command=external_software['qsub_remote'].replace('qsub','cd %s; qsub' %os.path.join(self.ProjectPath,self.xtalID,'cootOut','Refine_'+str(Serial)))
@@ -1567,7 +1574,8 @@ class RefineOld(object):
         Logfile.insert('changing directory to %s' %(os.path.join(self.ProjectPath,self.xtalID,'Refine_'+Serial)))
         if external_software['qsub']:
             Logfile.insert('starting refinement on cluster')
-            os.system('qsub -P labxchem refmac.csh')
+            # Removed for testing the efficacy of scripts with pause before refinement.
+            #os.system('qsub -P labxchem refmac.csh')
         elif external_software['qsub_remote'] != '':
             Logfile.insert('starting refinement on remote cluster')
             remote_command=external_software['qsub_remote'].replace('qsub','cd %s; qsub' %os.path.join(self.ProjectPath,self.xtalID,'Refine_'+Serial))
